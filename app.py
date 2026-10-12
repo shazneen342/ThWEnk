@@ -89,8 +89,8 @@ with st.sidebar:
 
 st.title("THWENK · Turn a podcast into understanding")
 st.write("Explore the ideas, inspect the evidence, and learn in English or বাংলা.")
-if not key or key.startswith("REPLACE_"):
-    st.warning("Setup needed: add your selected provider API key to server secrets. See SETUP_GUIDE.md.")
+#if not key or key.startswith("REPLACE_"):
+   # st.warning("Setup needed: add your selected provider API key to server secrets. See SETUP_GUIDE.md.")
 
 with st.expander("1 · Add your transcript", expanded="episode" not in st.session_state):
     mode = st.radio("Input method", ["Paste text", "Upload file", "Try a sample"], horizontal=True)
