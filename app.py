@@ -35,9 +35,9 @@ if password and not st.session_state.get("authenticated"):
             st.error("Incorrect password.")
     st.stop()
 
-provider = setting("AI_PROVIDER", "gemini").lower()
-key = setting("GROQ_API_KEY" if provider == "groq" else "GEMINI_API_KEY")
-model = setting("GROQ_MODEL", DEFAULT_GROQ_MODEL) if provider == "groq" else setting("GEMINI_MODEL", DEFAULT_MODEL)
+provider = setting("AI_PROVIDER", "groq").lower()
+key = setting("GROQ_API_KEY" if provider == "groq" else "Groq_API_KEY")
+model = setting("GROQ_MODEL", DEFAULT_GROQ_MODEL) if provider == "groq" else setting("Groq_MODEL", DEFAULT_MODEL)
 
 
 def ask(schema, task, segments, language, context=None):
