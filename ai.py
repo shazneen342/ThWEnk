@@ -56,113 +56,56 @@ Keep all fields concise; the entire result should be under about 2500 words.
 """
 
 
-def _generate_once(schema: type[T], task: str, segments: list[Segment], language: str,
-             key: str, model: str = DEFAULT_MODEL, context: dict | None = None, provider: str = "groq") -> T:
-    provider = provider.lower()
-    if provider not in {"groq"}:
-        raise AIError("AI_PROVIDER must be gemini or groq.")
-    key_name = "GROQ_API_KEY" if provider == "groq" else "GEMINI_API_KEY"
-    if not key or key.startswith("REPLACE_"):
-        raise AIError(f"Set {key_name} in .streamlit/secrets.toml (or hosting Secrets).")
-    if not re.fullmatch(r"[A-Za-z0-9._/-]+", model) or ".." in model:
-        raise AIError("Use a valid model ID from the selected provider.")
-    payload = {
-        "systemInstruction": {"parts": [{"text": system_prompt(language)}]},
-        "contents": [{"role": "user", "parts": [{"text": json.dumps({
-            "task": task, "transcript_segments": source_payload(segments),
-            "user_context": context or {},
-        }, ensure_ascii=False)}]}],
-        "generationConfig": {
-            "responseMimeType": "application/json",
-            "responseJsonSchema": schema.model_json_schema(),
-            "maxOutputTokens": 12000,
-        },
-    }
-    request = urllib.request.Request(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        headers={"Content-Type": "application/json", "x-goog-api-key": key},
-        method="POST",
-    )
-    if provider == "groq":
-        if sum(len(s.text) for s in segments) > 4000:
-            raise AIError("For the Groq free-tier demo, use an excerpt under 4,000 spoken-text characters. Start with the included sample.")
-        payload = {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": system_prompt(language) +
-                 "\nKeep the full response concise, under about 650 words. Use this JSON schema exactly:\n" +
-                 json.dumps(schema.model_json_schema(), ensure_ascii=False)},
-                {"role": "user", "content": json.dumps({"task": task,
-                 "transcript_segments": source_payload(segments), "user_context": context or {}}, ensure_ascii=False)},
-            ],
-            "response_format": {"type": "json_object"},
-            "max_completion_tokens": 4096,
-        }
-        if model.startswith("openai/gpt-oss-"):
-            payload["reasoning_effort"] = "low"
-        request = urllib.request.Request(
-            "https://api.groq.com/openai/v1/chat/completions",
-            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-            headers={"Content-Type": "application/json", "Authorization": "Bearer " + key,
-                     "User-Agent": "THWENK-Podcast-Companion/1.1"}, method="POST",
-        )
-    response_body = None
-    for attempt in range(2):
-        reserve_request()
-        try:
-            with urllib.request.urlopen(request, timeout=60) as response:
-                response_body = json.load(response)
-            break
-        except urllib.error.HTTPError as exc:
-            # Never display the provider's raw response; it may include user content.
-            code = exc.code
-            exc.close()
-            if code in {500, 502, 503, 504} and attempt == 0:
-                time.sleep(1)
-                continue
-            messages = {
-                400: "Provider rejected the request. Check the configured model's structured-output support and shorten the transcript.",
-                401: "API authentication failed. Check the server's API key.",
-                403: "API access denied. Check your key, project permissions and regional availability.",
-                404: "Configured model is unavailable. Check the selected provider model ID and model permissions.",
-                429: "Provider quota or rate limit reached. Wait and check the selected provider dashboard; do not enable billing just to retry.",
-            }
-            raise AIError(messages.get(code, f"AI service returned HTTP {code}. Please try later.")) from None
-        except (urllib.error.URLError, TimeoutError, socket.timeout):
-            # A timeout may occur after provider processing; do not automatically repeat it.
-            raise AIError("AI request timed out or the network is unavailable. Your previous results are preserved.") from None
-        except (json.JSONDecodeError, UnicodeError):
-            raise AIError("AI service returned an unreadable response. Please try again.") from None
+"""Run from the project folder: python check_api.py [--list-models]."""
+import json
+import os
+import sys
+import tomllib
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+from ai import AIError, DEFAULT_GROQ_MODEL, generate
+from core import Overview, parse_transcript
+
+
+def main():
+    path = Path(__file__).parent / ".streamlit" / "secrets.toml"
     try:
-        if provider == "groq":
-            choices = response_body.get("choices", [])
-            if not choices or choices[0].get("finish_reason") != "stop":
-                raise AIError("Groq returned an incomplete or blocked result. Use a shorter excerpt.")
-            text = choices[0].get("message", {}).get("content", "")
-        else:
-            candidates = response_body.get("candidates", [])
-            if not candidates:
-                raise AIError("The AI service returned no result, possibly due to content filtering. Try another permitted excerpt.")
-            candidate = candidates[0]
-            if candidate.get("finishReason") != "STOP":
-                raise AIError("The AI response was incomplete or blocked. Try a shorter excerpt.")
-            text = "".join(p.get("text", "") for p in candidate.get("content", {}).get("parts", [])
-                           if not p.get("thought", False))
-        text = unwrap_json_object(text, schema)
-        result = schema.model_validate_json(text)
-        result = normalise_chapter_ranges(result, segments)
-        validate_sources(result, segments)
-        return result
-    except AIError:
-        raise
-    except ValidationError as exc:
-        problems = "; ".join(".".join(map(str, e["loc"])) + ": " + e["type"] for e in exc.errors(include_input=False)[:3])
-        raise AIError("AI format checks failed: " + problems + ". Existing results were kept; retry the request.") from None
-    except ValueError as exc:
-        raise AIError("AI source check failed: " + str(exc) + " Existing results were kept.") from None
-    except (TypeError, KeyError, AttributeError):
-        raise AIError("AI output failed validation. Existing results were kept. Retry this section or perspective.") from None
+        config = tomllib.loads(path.read_text(encoding="utf-8-sig")) if path.exists() else {}
+    except (OSError, tomllib.TOMLDecodeError):
+        print("Cannot read secrets.toml. Use UTF-8 encoding and double-quoted TOML values.")
+        return 1
+    key = os.environ.get("GROQ_API_KEY") or config.get("GROQ_API_KEY", "")
+    model = os.environ.get("GROQ_MODEL") or config.get("GROQ_MODEL", DEFAULT_GROQ_MODEL)
+    if not key or key.startswith("REPLACE_"):
+        print("Set GROQ_API_KEY in .streamlit/secrets.toml first. Never paste the key into chat.")
+        return 1
+    if "--list-models" in sys.argv:
+        try:
+            req = urllib.request.Request("https://api.groq.com/openai/v1/models",
+                headers={"Authorization": "Bearer " + key, "User-Agent": "THWENK/1.0"})
+            with urllib.request.urlopen(req, timeout=30) as response:
+                for item in json.load(response).get("data", []):
+                    print(item["id"])
+            return 0
+        except (urllib.error.URLError, TimeoutError, ValueError):
+            print("Could not list models. Check the API key and connection.")
+            return 1
+    try:
+        segments = parse_transcript((Path(__file__).parent / "samples/learning.txt").read_text(encoding="utf-8"))
+        result = generate(Overview, "Create a concise overview with themes and takeaways.", segments, "Bangla", key, model)
+        print("SUCCESS: real API response passed schema and source-ID checks.")
+        print("Model:", model)
+        print(json.dumps(result.model_dump(), ensure_ascii=not sys.stdout.encoding.lower().startswith("utf"), indent=2))
+        return 0
+    except AIError as exc:
+        print(str(exc))
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
 
 
 def chunk_segments(segments, budget=3000):
