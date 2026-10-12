@@ -1,4 +1,4 @@
-"""Server-side Gemini/Groq REST adapters. No browser-side key, tools or external browsing."""
+
 from __future__ import annotations
 
 import json
@@ -15,7 +15,6 @@ from pydantic import BaseModel, ValidationError
 from core import Segment, source_payload, validate_sources
 
 T = TypeVar("T", bound=BaseModel)
-DEFAULT_MODEL = "gemini-3.8-flash"
 DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
 _calls: deque[float] = deque()
 _lock = Lock()
@@ -58,9 +57,9 @@ Keep all fields concise; the entire result should be under about 2500 words.
 
 
 def _generate_once(schema: type[T], task: str, segments: list[Segment], language: str,
-             key: str, model: str = DEFAULT_MODEL, context: dict | None = None, provider: str = "gemini") -> T:
+             key: str, model: str = DEFAULT_MODEL, context: dict | None = None, provider: str = "groq") -> T:
     provider = provider.lower()
-    if provider not in {"gemini", "groq"}:
+    if provider not in {"groq"}:
         raise AIError("AI_PROVIDER must be gemini or groq.")
     key_name = "GROQ_API_KEY" if provider == "groq" else "GEMINI_API_KEY"
     if not key or key.startswith("REPLACE_"):
@@ -277,7 +276,7 @@ def unwrap_json_object(text, schema):
     return json.dumps(value, ensure_ascii=False)
 
 
-def generate(schema, task, segments, language, key, model=DEFAULT_MODEL, context=None, provider="gemini"):
+def generate(schema, task, segments, language, key, model=DEFAULT_MODEL, context=None, provider="groq"):
     for attempt in range(2):
         try:
             return _generate_once(schema, task, segments, language, key, model, context, provider)
