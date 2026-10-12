@@ -8,7 +8,7 @@ import streamlit as st
 
 from ai import AIError, DEFAULT_GROQ_MODEL, generate, build_long_episode, select_passages, chunk_segments
 from core import (Chapter, Episode, Explanation, Overview, Quiz, Reflection,
-MAX_CHARS, decode_upload, export_markdown, parse_transcript, timestamp)
+                  MAX_CHARS, decode_upload, export_markdown, parse_transcript, timestamp)
 
 st.set_page_config(page_title="THWENK · Podcast Companion", page_icon="🎧", layout="wide")
 
@@ -35,9 +35,8 @@ if password and not st.session_state.get("authenticated"):
             st.error("Incorrect password.")
     st.stop()
 
-provider = setting("AI_PROVIDER", "groq").lower()
-key = setting("GROQ_API_KEY" if provider == "groq" else "Groq_API_KEY")
-model = setting("GROQ_MODEL", DEFAULT_GROQ_MODEL) if provider == "groq" else setting("Groq_MODEL", DEFAULT_MODEL)
+key = setting("GROQ_API_KEY")
+model = setting("GROQ_MODEL", DEFAULT_GROQ_MODEL)
 
 
 def ask(schema, task, segments, language, context=None):
@@ -52,7 +51,7 @@ def ask(schema, task, segments, language, context=None):
         task += " Analyse only these selected passages. Explicitly state this limited scope; do not claim complete coverage."
         if context and "current" in context:
             context = {k: v for k, v in context.items() if k != "current"}
-    return generate(schema, task, segments, language, key, model, context, provider=provider)
+    return generate(schema, task, segments, language, key, model, context)
 
 
 def sources(ids, segments):
@@ -79,9 +78,8 @@ with st.sidebar:
     st.info("English / Bangla transcripts. Full transcripts: up to 200,000 characters, 2 MB and 5,000 source passages.")
     st.caption("No audio upload in this version. Chakma support is planned, not implemented.")
     st.caption("AI content may be incorrect. Source links show transcript support, not independent verification.")
-    st.caption(f"Transcript content is sent to {provider.title()} when you generate or revise. Use permitted, non-sensitive material.")
-    if provider == "groq":
-        st.caption("Long transcripts are processed section by section. If quota is reached, wait and click Generate again to resume. Keep this tab open.")
+    st.caption("Transcript content is sent to Groq when you generate or revise. Use permitted, non-sensitive material.")
+    st.caption("Long transcripts are processed section by section. If quota is reached, wait and click Generate again to resume. Keep this tab open.")
     if st.button("Clear episode"):
         for name in ["episode", "segments", "language", "reflections", "explanations", "fingerprint"]:
             st.session_state.pop(name, None)
@@ -89,8 +87,8 @@ with st.sidebar:
 
 st.title("THWENK · Turn a podcast into understanding")
 st.write("Explore the ideas, inspect the evidence, and learn in English or বাংলা.")
-#if not key or key.startswith("REPLACE_"):
-   # st.warning("Setup needed: add your selected provider API key to server secrets. See SETUP_GUIDE.md.")
+if not key or key.startswith("REPLACE_"):
+    st.warning("Setup needed: add GROQ_API_KEY to .streamlit/secrets.toml (or your hosting Secrets).")
 
 with st.expander("1 · Add your transcript", expanded="episode" not in st.session_state):
     mode = st.radio("Input method", ["Paste text", "Upload file", "Try a sample"], horizontal=True)
@@ -114,11 +112,11 @@ with st.expander("1 · Add your transcript", expanded="episode" not in st.sessio
         st.caption("Original illustrative sample, not a real podcast or scientific study. This still calls the real AI API.")
         st.text(raw)
     st.caption("Long episodes take multiple API calls. Completed sections can be resumed in this tab after an error. The full overview combines section summaries; follow-up analysis uses selected passages.")
-    consent = st.checkbox(f"I have permission to process this content and agree to send it to {provider.title()}.")
+    consent = st.checkbox("I have permission to process this content and agree to send it to Groq.")
     if st.button("Generate companion", type="primary", disabled=not consent):
         try:
             segments = parse_transcript(raw, extension)
-            fingerprint = hashlib.sha256((raw + output_language + provider + model).encode()).hexdigest()
+            fingerprint = hashlib.sha256((raw + output_language + model).encode()).hexdigest()
             if st.session_state.get("fingerprint") == fingerprint:
                 st.info("This transcript and language are already loaded. Use the revision controls below.")
             else:
@@ -130,7 +128,7 @@ with st.expander("1 · Add your transcript", expanded="episode" not in st.sessio
                     def progress(done, total, remaining=0):
                         bar.progress(done / total, text=f"Section {done}/{total} complete" + (f" · quota pacing: {remaining}s" if remaining else " · saved in this session"))
                     episode = build_long_episode(segments, output_language, ask,
-                        st.session_state.section_cache, progress, pause_seconds=65 if provider == "groq" else 0)
+                        st.session_state.section_cache, progress, pause_seconds=65)
                 st.session_state.update(episode=episode, segments=segments, language=output_language,
                     reflections={}, explanations={}, fingerprint=fingerprint,
                     quiz_version=st.session_state.get("quiz_version", 0) + 1)
