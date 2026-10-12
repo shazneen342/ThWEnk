@@ -1,0 +1,23 @@
+1
+00:00:00,000 --> 00:00:12,000
+Host: Today we discuss learning from podcasts. Recognising a term is different from understanding it.
+
+2
+00:00:12,000 --> 00:00:28,000
+Guest: Pause after a section and explain the main idea in your own words. Write down unclear terms and revisit the source.
+
+3
+00:00:28,000 --> 00:00:47,000
+Host: Opportunity cost means the value of the next-best alternative you give up. Studying instead of working can mean giving up wages for that hour.
+
+4
+00:00:47,000 --> 00:01:05,000
+Guest: This does not make studying a bad choice. The learner may value future benefits more than today's income.
+
+5
+00:01:05,000 --> 00:01:25,000
+Host: A short summary may omit uncertainty. Readers should be able to inspect the original passage. A confident claim is not automatically strong evidence.
+
+6
+00:01:25,000 --> 00:01:48,000
+Guest: This conversation gives suggestions. We have not presented an experiment, so we cannot claim a measured improvement in exam scores.
