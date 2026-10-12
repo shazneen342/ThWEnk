@@ -6,7 +6,8 @@ from pathlib import Path
 
 import streamlit as st
 
-from ai import AIError, DEFAULT_GROQ_MODEL, generate, build_long_episode, select_passages, chunk_segmentsfrom core import (Chapter, Episode, Explanation, Overview, Quiz, Reflection,
+from ai import AIError, DEFAULT_GROQ_MODEL, generate, build_long_episode, select_passages, chunk_segments
+from core import (Chapter, Episode, Explanation, Overview, Quiz, Reflection,
 MAX_CHARS, decode_upload, export_markdown, parse_transcript, timestamp)
 
 st.set_page_config(page_title="THWENK · Podcast Companion", page_icon="🎧", layout="wide")
